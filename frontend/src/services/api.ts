@@ -2,6 +2,16 @@ import axios from 'axios';
 import type { AnalysisResult, DashboardStats, LogEntry, SemanticSearchResult } from '../types';
 import { mockDashboardStats, mockRecentLogs, mockSampleAnalysis, mockSemanticSearchResults } from './mockData';
 
+export interface NotificationItem {
+  id: string;
+  title: string;
+  message: string;
+  timestamp: string;
+  severity: 'info' | 'warning' | 'error' | 'critical';
+  read: boolean;
+  category: string;
+}
+
 const api = axios.create({
   baseURL: '/api',
   headers: {
@@ -77,7 +87,6 @@ export const searchSemanticLogs = async (query: string): Promise<SemanticSearchR
     const qTokens = query.toLowerCase().split(/\s+/).filter((t) => t.length > 1);
     if (qTokens.length === 0) return mockSemanticSearchResults;
 
-    // Extended log corpus for comprehensive search matching
     const extendedCorpus: LogEntry[] = [
       ...mockRecentLogs,
       {
@@ -146,13 +155,85 @@ export const searchSemanticLogs = async (query: string): Promise<SemanticSearchR
       }
     });
 
-    // If query was very broad or didn't hit direct keywords, return top relevance corpus sorted by score
     if (scoredResults.length === 0) {
       return mockSemanticSearchResults;
     }
 
     scoredResults.sort((a, b) => b.similarityScore - a.similarityScore);
     return scoredResults;
+  }
+};
+
+// MongoDB Notifications API Functions
+export const getNotifications = async (unreadOnly: boolean = false): Promise<NotificationItem[]> => {
+  try {
+    const res = await api.get<NotificationItem[]>('/notifications', { params: { unread_only: unreadOnly } });
+    return res.data;
+  } catch (err) {
+    console.warn('[Argus API] MongoDB backend unreachable. Using local notifications.', err);
+    return [
+      {
+        id: 'NOTIF-001',
+        title: 'High-Frequency SSH BruteForce Detected',
+        message: 'Origin IP 198.51.100.42 reached 48 failed password attempts targeting root.',
+        timestamp: '5 mins ago',
+        severity: 'critical',
+        read: false,
+        category: 'BruteForce Attack',
+      },
+      {
+        id: 'NOTIF-002',
+        title: 'Privilege Escalation Alert',
+        message: 'User admin-temp executed AttachUserPolicy with AdministratorAccess on analyst_dev.',
+        timestamp: '15 mins ago',
+        severity: 'error',
+        read: false,
+        category: 'Privilege Escalation',
+      },
+      {
+        id: 'NOTIF-003',
+        title: 'Obfuscated PowerShell Execution Stage',
+        message: 'Encoded PowerShell command executed on host 10.0.4.15.',
+        timestamp: '25 mins ago',
+        severity: 'critical',
+        read: true,
+        category: 'Malware Activity',
+      },
+      {
+        id: 'NOTIF-004',
+        title: 'Port Scan Detected',
+        message: 'Sequential TCP SYN port sweep originating from IP 45.33.32.156.',
+        timestamp: '1 hour ago',
+        severity: 'warning',
+        read: true,
+        category: 'Reconnaissance Scan',
+      },
+      {
+        id: 'NOTIF-005',
+        title: 'System Model Pipeline Update',
+        message: 'BERT classification model weights re-indexed and calibrated on latest log corpus.',
+        timestamp: '3 hours ago',
+        severity: 'info',
+        read: true,
+        category: 'System Telemetry',
+      },
+    ];
+  }
+};
+
+export const markAllNotificationsRead = async (): Promise<void> => {
+  try {
+    await api.patch('/notifications/read-all');
+  } catch (err) {
+    console.warn('[Argus API] Could not sync read-all to MongoDB backend.', err);
+  }
+};
+
+export const deleteNotification = async (id: string): Promise<void> => {
+  try {
+    await api.delete(`/notifications/${id}`);
+  } catch (err) {
+    console.warn(`[Argus API] Could not delete notification ${id} in MongoDB backend.`, err);
   }
 };
 

@@ -1,77 +1,37 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { GlassCard } from '../components/GlassCard';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { Bell, ShieldAlert, CheckCircle2, AlertTriangle, Info, Trash2 } from 'lucide-react';
 import type { Severity } from '../types';
-
-interface NotificationItem {
-  id: string;
-  title: string;
-  message: string;
-  timestamp: string;
-  severity: Severity;
-  read: boolean;
-  category: string;
-}
-
-const initialNotifications: NotificationItem[] = [
-  {
-    id: 'NOTIF-001',
-    title: 'High-Frequency SSH BruteForce Detected',
-    message: 'Origin IP 198.51.100.42 reached 48 failed password attempts targeting root.',
-    timestamp: '5 mins ago',
-    severity: 'critical',
-    read: false,
-    category: 'BruteForce Attack',
-  },
-  {
-    id: 'NOTIF-002',
-    title: 'Privilege Escalation Alert',
-    message: 'User admin-temp executed AttachUserPolicy with AdministratorAccess on analyst_dev.',
-    timestamp: '15 mins ago',
-    severity: 'error',
-    read: false,
-    category: 'Privilege Escalation',
-  },
-  {
-    id: 'NOTIF-003',
-    title: 'Obfuscated PowerShell Execution Stage',
-    message: 'Encoded PowerShell command executed on host 10.0.4.15.',
-    timestamp: '25 mins ago',
-    severity: 'critical',
-    read: true,
-    category: 'Malware Activity',
-  },
-  {
-    id: 'NOTIF-004',
-    title: 'Port Scan Detected',
-    message: 'Sequential TCP SYN port sweep originating from IP 45.33.32.156.',
-    timestamp: '1 hour ago',
-    severity: 'warning',
-    read: true,
-    category: 'Reconnaissance Scan',
-  },
-  {
-    id: 'NOTIF-005',
-    title: 'System Model Pipeline Update',
-    message: 'BERT classification model weights re-indexed and calibrated on latest log corpus.',
-    timestamp: '3 hours ago',
-    severity: 'info',
-    read: true,
-    category: 'System Telemetry',
-  },
-];
+import { getNotifications, markAllNotificationsRead, deleteNotification as deleteNotificationApi } from '../services/api';
+import type { NotificationItem } from '../services/api';
 
 export const Notifications: React.FC = () => {
-  const [notifications, setNotifications] = useState<NotificationItem[]>(initialNotifications);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [loading, setLoading] = useState(true);
 
-  const markAllAsRead = () => {
+  useEffect(() => {
+    let ignore = false;
+    getNotifications(filter === 'unread').then((data) => {
+      if (!ignore) {
+        setNotifications(data);
+        setLoading(false);
+      }
+    });
+    return () => {
+      ignore = true;
+    };
+  }, [filter]);
+
+  const handleMarkAllAsRead = async () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    await markAllNotificationsRead();
   };
 
-  const deleteNotification = (id: string) => {
+  const handleDeleteNotification = async (id: string) => {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
+    await deleteNotificationApi(id);
   };
 
   const filtered = filter === 'unread' ? notifications.filter((n) => !n.read) : notifications;
@@ -105,12 +65,12 @@ export const Notifications: React.FC = () => {
             <Bell size={22} style={{ color: 'var(--primary)' }} /> Security Alert Notifications
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-            Real-time security incident alerts, system notifications, and automated threat warnings.
+            Real-time security incident alerts, system notifications, and automated threat warnings from MongoDB document store.
           </p>
         </div>
 
         {unreadCount > 0 && (
-          <button className="btn-secondary" onClick={markAllAsRead}>
+          <button className="btn-secondary" onClick={handleMarkAllAsRead}>
             <CheckCircle2 size={16} /> Mark all as read
           </button>
         )}
@@ -160,7 +120,11 @@ export const Notifications: React.FC = () => {
 
       {/* Notifications List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%' }}>
-        {filtered.length > 0 ? (
+        {loading ? (
+          <GlassCard style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+            <p>Loading security notifications from MongoDB...</p>
+          </GlassCard>
+        ) : filtered.length > 0 ? (
           filtered.map((item) => {
             const Icon = getIcon(item.severity);
             return (
@@ -231,7 +195,7 @@ export const Notifications: React.FC = () => {
                       </div>
 
                       <button
-                        onClick={() => deleteNotification(item.id)}
+                        onClick={() => handleDeleteNotification(item.id)}
                         style={{
                           background: 'none',
                           border: 'none',
